@@ -110,10 +110,54 @@ class WebServiceRepository implements WebServiceRepositoryInterface
               $id = $sp->getId();
               array_push($spList, $spData);
               $category = $categoryFactory->create()->load($id);
-              $categoryProducts = $category->getProductCollection()->addAttributeToSelect('*');
+              $categoryProducts = $category->getProductCollection()->addAttributeToSelect('*')->addMediaGalleryData();
               foreach ($categoryProducts as $product) {
-                $productData = $product->getData();
-                array_push($productList, $productData);
+                $attributeList = array();
+                $optionsArray  = array();
+                $imagesArray  = array();
+                $reviewsArray  = array();
+                $configurableAttrs = $product->getTypeInstance()->getConfigurableAttributesAsArray($product);
+                foreach ($configurableAttrs as $attr) {
+                  $label = $attr['label'];
+                  $values = $attr['values'];
+                  array_push($optionsArray, array( $label => $values));
+                }
+                $attributeData = $product->getAttributes();
+                $images =  $product->getImage();
+                $galleryImages = $product->getMediaGalleryImages();
+                if(!empty($galleryImages)){
+                  foreach ($galleryImages as $image) {
+                    $imageUrl = $image->getUrl();
+                    array_push($imagesArray, $imageUrl);
+                  }
+                }
+                $reviewFactory = $objectManager->create('Magento\Review\Model\Review');
+                $reviewFactory->getEntitySummary($product, 1);
+                $ratingSummary = $product->getRatingSummary()->getRatingSummary();
+                $rating = $objectManager->get("Magento\Review\Model\ResourceModel\Review\CollectionFactory");
+                $reviewCollection = $rating->create()
+                        ->addStatusFilter(
+                            \Magento\Review\Model\Review::STATUS_APPROVED
+                        )->addEntityFilter(
+                            'product',
+                            $product->getId()
+                        )->setDateOrder();
+                if(!empty($reviewCollection)){
+                  foreach ($reviewCollection as $review) {
+                    $title = $review->getTitle();
+                    $detail = $review->getDetail();
+                    $reviewData = $review->getData();
+                    $createdDate = $reviewData["created_at"];
+                    $nickName = $reviewData["nickname"];
+                    array_push($reviewsArray, array( "title" => $title, "detail" => $detail, "date" => $createdDate, "nickName" => $nickName ));
+                  }
+                }
+                foreach ($attributeData as $attribute_code) {
+                  $label = $attribute_code->getStoreLabel();
+                  $attributeValue = $product->getResource()->getAttribute($attribute_code)->getFrontend()->getValue($product);
+                  array_push($attributeList, array( $label => $attributeValue));
+                }
+                array_push($productList, array("labels" => $attributeList, "options" => $optionsArray, "images" => $images, "gallery" => $imagesArray, "ratingPercentage" => $ratingSummary, "reviews" => $reviewsArray ));
               }
               array_push($productMeta, array("name" => $spData , "data" => $productList));
             }
